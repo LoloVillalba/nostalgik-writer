@@ -227,6 +227,7 @@
     <div id="toolbar">
         <button onclick="newDocument()">Nuevo</button>
         <button onclick="listDriveFiles()">Abrir</button>
+        <button onclick="saveLocal()" title="Descargar copia local en formato .txt">Guardar en local</button>
         <div style="width: 1px; height: 20px; background: var(--border-color); margin: 0 5px;"></div>
         
         <button onclick="formatText('bold')" title="Negrita"><b>B</b></button>
@@ -259,6 +260,7 @@ Nuevas funciones implementadas:
 - Modo Papel con textura de folio real.
 - Tipografía Special Elite (Efecto martilleo).
 - Sonido mecánico refinado (sin distorsión).
+- Guardado local en formato .txt habilitado.
 
 Escribe tu historia aquí...</div>
     </div>
@@ -393,6 +395,19 @@ Escribe tu historia aquí...</div>
                 else ruler += ".";
             }
             document.getElementById('ruler').innerText = ruler;
+        }
+
+        function saveLocal() {
+            const textContent = document.getElementById('editor').innerText;
+            const blob = new Blob([textContent], { type: 'text/plain;charset=utf-8' });
+            const a = document.createElement('a');
+            a.href = URL.createObjectURL(blob);
+            a.download = `${documentTitle.toUpperCase()}.TXT`;
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
+            URL.revokeObjectURL(a.href);
+            logMessage('Descarga local completada');
         }
 
         // --- DRIVE LOGIC ---
