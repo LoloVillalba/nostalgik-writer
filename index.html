@@ -159,17 +159,30 @@
             border-top: 1px solid var(--border-color);
             padding: 8px 20px;
             font-size: 10px;
-            display: flex;
-            justify-content: space-between;
+            display: grid;
+            grid-template-columns: 1fr auto 1fr;
             background: rgba(13, 20, 22, 0.2);
             letter-spacing: 1px;
             text-transform: uppercase;
             z-index: 100;
+            gap: 20px;
+        }
+
+        .status-group {
+            display: flex;
+            gap: 15px;
+            overflow: hidden;
+            white-space: nowrap;
         }
 
         #message-log {
             color: var(--accent-color);
             font-weight: bold;
+            text-align: center;
+        }
+
+        .status-right {
+            justify-content: flex-end;
         }
 
         dialog {
@@ -245,15 +258,21 @@ V1.2: ACTUALIZACIÓN OLIVETTI
 Nuevas funciones implementadas:
 - Modo Papel con textura de folio real.
 - Tipografía Special Elite (Efecto martilleo).
-- Sonido mecánico en tiempo real (Pruébalo ahora).
+- Sonido mecánico refinado (sin distorsión).
 
 Escribe tu historia aquí...</div>
     </div>
 
     <div id="status-bar">
-        <span>NOSTALGIK WRITER</span>
+        <div class="status-group">
+            <span>NOSTALGIK WRITER</span>
+            <span id="display-filename">ARCHIVO: NUEVO_</span>
+        </div>
         <span id="message-log">LISTO_</span>
-        <span id="char-count">0 CARACTERES</span>
+        <div class="status-group status-right">
+            <span id="display-user">USUARIO: DESCONECTADO_</span>
+            <span id="char-count">0 CARACTERES</span>
+        </div>
     </div>
 
     <!-- Modales -->
@@ -276,30 +295,41 @@ Escribe tu historia aquí...</div>
     </dialog>
 
     <script>
-        // --- MOTOR DE SONIDO (Web Audio API) ---
+        // --- MOTOR DE SONIDO REFINADO ---
         let audioCtx = null;
         let soundEnabled = false;
 
         function playClick() {
             if (!soundEnabled) return;
             if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
-            
-            const oscillator = audioCtx.createOscillator();
+            const bufferSize = audioCtx.sampleRate * 0.05;
+            const buffer = audioCtx.createBuffer(1, bufferSize, audioCtx.sampleRate);
+            const data = buffer.getChannelData(0);
+            for (let i = 0; i < bufferSize; i++) { data[i] = Math.random() * 2 - 1; }
+            const noiseSource = audioCtx.createBufferSource();
+            noiseSource.buffer = buffer;
+            const filter = audioCtx.createBiquadFilter();
+            filter.type = 'bandpass';
+            filter.frequency.value = 1200 + Math.random() * 800;
+            filter.Q.value = 1.5;
             const gainNode = audioCtx.createGain();
-            
-            // Sonido corto de "click" mecánico
-            oscillator.type = 'square';
-            oscillator.frequency.setValueAtTime(120 + Math.random() * 40, audioCtx.currentTime);
-            oscillator.frequency.exponentialRampToValueAtTime(30, audioCtx.currentTime + 0.08);
-            
-            gainNode.gain.setValueAtTime(0.1, audioCtx.currentTime);
-            gainNode.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + 0.08);
-            
-            oscillator.connect(gainNode);
+            gainNode.gain.setValueAtTime(0.08, audioCtx.currentTime);
+            gainNode.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + 0.04);
+            const thump = audioCtx.createOscillator();
+            const thumpGain = audioCtx.createGain();
+            thump.type = 'sine';
+            thump.frequency.setValueAtTime(150, audioCtx.currentTime);
+            thump.frequency.exponentialRampToValueAtTime(40, audioCtx.currentTime + 0.03);
+            thumpGain.gain.setValueAtTime(0.05, audioCtx.currentTime);
+            thumpGain.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + 0.03);
+            noiseSource.connect(filter);
+            filter.connect(gainNode);
             gainNode.connect(audioCtx.destination);
-            
-            oscillator.start();
-            oscillator.stop(audioCtx.currentTime + 0.08);
+            thump.connect(thumpGain);
+            thumpGain.connect(audioCtx.destination);
+            noiseSource.start();
+            thump.start();
+            thump.stop(audioCtx.currentTime + 0.03);
         }
 
         function toggleSound() {
@@ -307,6 +337,7 @@ Escribe tu historia aquí...</div>
             const btn = document.getElementById('sound-toggle');
             btn.innerText = `Sonido: ${soundEnabled ? 'ON' : 'OFF'}`;
             btn.classList.toggle('active-btn', soundEnabled);
+            if (audioCtx && audioCtx.state === 'suspended') audioCtx.resume();
             logMessage(soundEnabled ? 'Sonido activado' : 'Sonido silenciado');
         }
 
@@ -315,6 +346,10 @@ Escribe tu historia aquí...</div>
             const logArea = document.getElementById('message-log');
             logArea.innerText = `${msg.toUpperCase()}_`;
             setTimeout(() => { logArea.innerText = 'LISTO_'; }, 4000);
+        }
+
+        function updateDisplayInfo() {
+            document.getElementById('display-filename').innerText = `ARCHIVO: ${documentTitle.toUpperCase()}.TXT_`;
         }
 
         function toggleTheme() {
@@ -339,8 +374,7 @@ Escribe tu historia aquí...</div>
                 e.preventDefault();
                 document.execCommand('insertText', false, '\t');
             }
-            // Ejecutar sonido al teclear
-            if (!e.ctrlKey && !e.altKey && !e.metaKey && e.key.length === 1 || e.key === 'Enter' || e.key === 'Backspace') {
+            if (!e.ctrlKey && !e.altKey && !e.metaKey && (e.key.length === 1 || e.key === 'Enter' || e.key === 'Backspace')) {
                 playClick();
             }
         });
@@ -362,10 +396,11 @@ Escribe tu historia aquí...</div>
         }
 
         // --- DRIVE LOGIC ---
-        let tokenClient, accessToken = null, currentDriveFileId = null, documentTitle = "Nuevo_Documento";
+        let tokenClient, accessToken = null, currentDriveFileId = null, documentTitle = "NUEVO_DOC";
 
         window.onload = () => {
             generateRuler();
+            updateDisplayInfo();
             const savedClientId = localStorage.getItem('gdrive_client_id');
             if(savedClientId) document.getElementById('client-id-input').value = savedClientId;
             const savedData = localStorage.getItem('nostalgik_save');
@@ -380,18 +415,31 @@ Escribe tu historia aquí...</div>
             logMessage('CONFIGURACIÓN GUARDADA');
         }
 
+        async function fetchUserEmail() {
+            try {
+                const response = await fetch('https://www.googleapis.com/oauth2/v3/userinfo', {
+                    headers: { 'Authorization': 'Bearer ' + accessToken }
+                });
+                const data = await response.json();
+                if (data.email) {
+                    document.getElementById('display-user').innerText = `USUARIO: ${data.email.toUpperCase()}_`;
+                }
+            } catch (e) { console.error("Error al obtener email", e); }
+        }
+
         function initGoogleAPI() {
             const clientId = localStorage.getItem('gdrive_client_id');
             if (!clientId || !window.google) return;
             tokenClient = google.accounts.oauth2.initTokenClient({
                 client_id: clientId,
-                scope: 'https://www.googleapis.com/auth/drive.file',
+                scope: 'https://www.googleapis.com/auth/drive.file https://www.googleapis.com/auth/userinfo.email',
                 callback: (tokenResponse) => {
                     if (tokenResponse && tokenResponse.access_token) {
                         accessToken = tokenResponse.access_token;
                         document.getElementById('btn-drive-action').innerText = "GUARDAR";
                         document.getElementById('btn-save-as').style.display = "inline-block";
                         logMessage('CONECTADO A DRIVE');
+                        fetchUserEmail();
                     }
                 },
             });
@@ -406,7 +454,8 @@ Escribe tu historia aquí...</div>
             if (confirm("¿Limpiar editor para nuevo documento?")) {
                 document.getElementById('editor').innerHTML = "[NUEVO DOCUMENTO]<br><br>";
                 currentDriveFileId = null;
-                documentTitle = "Nuevo_Documento";
+                documentTitle = "NUEVO_DOC";
+                updateDisplayInfo();
                 logMessage('NUEVO ARCHIVO');
             }
         }
@@ -442,6 +491,7 @@ Escribe tu historia aquí...</div>
                 document.getElementById('editor').innerText = await response.text();
                 currentDriveFileId = fileId;
                 documentTitle = fileName.replace('.txt', '');
+                updateDisplayInfo();
                 document.getElementById('drive-explorer').close();
                 logMessage('CARGADO');
             } catch (e) { logMessage('ERROR CARGA'); }
@@ -449,9 +499,9 @@ Escribe tu historia aquí...</div>
 
         async function saveToDrive(forceNew = false) {
             if (!currentDriveFileId || forceNew) {
-                let userTitle = prompt("Título del archivo:", forceNew ? documentTitle + "_copia" : documentTitle);
+                let userTitle = prompt("Título del archivo:", forceNew ? documentTitle + "_COPIA" : documentTitle);
                 if (!userTitle) return;
-                documentTitle = userTitle;
+                documentTitle = userTitle.toUpperCase();
                 if (forceNew) currentDriveFileId = null;
             }
             logMessage('GUARDANDO...');
@@ -467,7 +517,11 @@ Escribe tu historia aquí...</div>
                     body: form
                 });
                 const data = await response.json();
-                if (data.id) { currentDriveFileId = data.id; logMessage('GUARDADO OK'); }
+                if (data.id) { 
+                    currentDriveFileId = data.id; 
+                    updateDisplayInfo();
+                    logMessage('GUARDADO OK'); 
+                }
             } catch (e) { logMessage('ERROR GUARDAR'); }
         }
     </script>
