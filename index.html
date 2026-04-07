@@ -48,6 +48,9 @@
             overflow: hidden;
             transition: background-color 0.8s ease, color 0.8s ease;
             position: relative;
+            /* Forzar colores en impresión */
+            -webkit-print-color-adjust: exact;
+            print-color-adjust: exact;
         }
 
         /* Textura de papel para modo claro */
@@ -220,6 +223,36 @@
             background: var(--accent-color);
             color: var(--bg-color);
         }
+
+        /* --- CONFIGURACIÓN DE IMPRESIÓN / PDF --- */
+        @media print {
+            #toolbar, #ruler, #status-bar, body::after, .highlight {
+                display: none !important;
+            }
+            body {
+                background-color: var(--bg-color) !important;
+                overflow: visible !important;
+                height: auto !important;
+            }
+            #editor-container {
+                padding: 0 !important;
+                margin: 0 !important;
+                background: none !important;
+                overflow: visible !important;
+            }
+            #editor {
+                width: 100% !important;
+                max-width: 100% !important;
+                text-shadow: none !important;
+                color: var(--text-color) !important;
+            }
+            /* Asegurar que la textura de papel aparezca si está activa */
+            body.light-mode::before {
+                opacity: 0.6 !important;
+                display: block !important;
+            }
+        }
+
     </style>
 </head>
 <body>
@@ -228,6 +261,7 @@
         <button onclick="newDocument()">Nuevo</button>
         <button onclick="listDriveFiles()">Abrir</button>
         <button onclick="saveLocal()" title="Descargar copia local en formato .txt">Guardar en local</button>
+        <button onclick="exportRichText()" class="highlight" title="Exportar con diseño (PDF/Imprimir)">Exportar Diseño</button>
         <div style="width: 1px; height: 20px; background: var(--border-color); margin: 0 5px;"></div>
         
         <button onclick="formatText('bold')" title="Negrita"><b>B</b></button>
@@ -261,6 +295,7 @@ Nuevas funciones implementadas:
 - Tipografía Special Elite (Efecto martilleo).
 - Sonido mecánico refinado (sin distorsión).
 - Guardado local en formato .txt habilitado.
+- Exportación con diseño (PDF/Imprimir).
 
 Escribe tu historia aquí...</div>
     </div>
@@ -408,6 +443,14 @@ Escribe tu historia aquí...</div>
             document.body.removeChild(a);
             URL.revokeObjectURL(a.href);
             logMessage('Descarga local completada');
+        }
+
+        // Función para exportar con diseño (PDF/Imprimir)
+        function exportRichText() {
+            logMessage('Preparando impresión...');
+            // Simplemente llamamos a imprimir. El CSS @media print se encarga del resto.
+            // En la ventana de impresión el usuario podrá seleccionar "Guardar como PDF".
+            window.print();
         }
 
         // --- DRIVE LOGIC ---
