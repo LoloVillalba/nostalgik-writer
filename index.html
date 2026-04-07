@@ -1,0 +1,417 @@
+
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Nostalgik Writer</title>
+    <!-- Scripts oficiales de Google Identity Services -->
+    <script src="https://accounts.google.com/gsi/client" async defer></script>
+    <style>
+        :root {
+            /* Colores extraídos de la imagen adjunta */
+            --bg-color: #0b1114;
+            --text-color: #a7c0c4;
+            --border-color: #2a3a3f;
+            --font-family: 'Courier New', Consolas, monospace;
+            --selection-bg: #a7c0c4;
+            --selection-text: #0b1114;
+        }
+
+        body.light-mode {
+            --bg-color: #f0f0f0;
+            --text-color: #1a1a1a;
+            --border-color: #cccccc;
+            --selection-bg: #1a1a1a;
+            --selection-text: #f0f0f0;
+        }
+
+        * {
+            box-sizing: border-box;
+        }
+
+        body {
+            background-color: var(--bg-color);
+            color: var(--text-color);
+            font-family: var(--font-family);
+            margin: 0;
+            display: flex;
+            flex-direction: column;
+            height: 100vh;
+            overflow: hidden;
+            transition: background-color 0.3s, color 0.3s;
+        }
+
+        ::selection {
+            background-color: var(--selection-bg);
+            color: var(--selection-text);
+        }
+
+        /* Barra de Herramientas */
+        #toolbar {
+            border-bottom: 1px solid var(--border-color);
+            padding: 8px 15px;
+            display: flex;
+            gap: 10px;
+            background-color: var(--bg-color);
+            flex-wrap: wrap;
+            align-items: center;
+        }
+
+        button {
+            background: var(--bg-color);
+            color: var(--text-color);
+            border: 1px solid var(--border-color);
+            padding: 4px 12px;
+            font-family: inherit;
+            cursor: pointer;
+            font-weight: bold;
+            font-size: 13px;
+            text-transform: uppercase;
+            transition: all 0.1s;
+        }
+
+        button:hover, button:active {
+            background: var(--text-color);
+            color: var(--bg-color);
+        }
+
+        button.highlight {
+            border-color: var(--text-color);
+            border-style: dashed;
+        }
+
+        /* Regla superior estilo retro */
+        #ruler {
+            font-family: var(--font-family);
+            font-size: 12px;
+            color: var(--border-color);
+            white-space: pre;
+            padding: 2px 40px;
+            border-bottom: 1px solid var(--border-color);
+            text-align: center;
+            user-select: none;
+            overflow: hidden;
+            letter-spacing: 0.1em;
+        }
+
+        /* Área de Edición */
+        #editor-container {
+            flex: 1;
+            padding: 20px 40px;
+            overflow-y: auto;
+            display: flex;
+            justify-content: center;
+        }
+
+        #editor {
+            width: 100%;
+            max-width: 850px; 
+            outline: none;
+            font-size: 16px;
+            line-height: 1.5;
+            white-space: pre-wrap;
+            tab-size: 4;
+            min-height: 100%;
+            /* Efecto CRT sutil */
+            text-shadow: 0px 0px 2px rgba(167, 192, 196, 0.4);
+        }
+
+        /* Barra de estado / Mensajes */
+        #status-bar {
+            border-top: 1px solid var(--border-color);
+            padding: 5px 15px;
+            font-size: 12px;
+            display: flex;
+            justify-content: space-between;
+        }
+
+        #message-log {
+            animation: blink 1s step-end infinite;
+        }
+
+        @keyframes blink {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0; }
+        }
+
+        /* Modal de Configuración Drive */
+        dialog {
+            background-color: var(--bg-color);
+            color: var(--text-color);
+            border: 2px solid var(--text-color);
+            padding: 20px;
+            max-width: 500px;
+            font-family: var(--font-family);
+        }
+        
+        dialog::backdrop {
+            background: rgba(0,0,0,0.8);
+        }
+
+        dialog h3 { margin-top: 0; }
+        dialog input {
+            width: 100%;
+            background: transparent;
+            color: var(--text-color);
+            border: 1px solid var(--border-color);
+            padding: 5px;
+            margin-bottom: 15px;
+            font-family: inherit;
+        }
+        dialog .help-text { font-size: 11px; color: #779; margin-bottom: 15px; }
+
+    </style>
+</head>
+<body>
+
+    <div id="toolbar">
+        <button onclick="formatText('bold')" title="Negrita"><b>N</b></button>
+        <button onclick="formatText('italic')" title="Cursiva"><i>K</i></button>
+        <span style="border-left: 1px solid var(--border-color); margin: 0 5px; height: 20px;"></span>
+        
+        <button onclick="alignText('justifyLeft')" title="Alinear Izquierda">|&equiv;</button>
+        <button onclick="alignText('justifyCenter')" title="Centrar">&equiv;</button>
+        <button onclick="alignText('justifyRight')" title="Alinear Derecha">&equiv;|</button>
+        <button onclick="alignText('justifyFull')" title="Justificar">&equiv;&equiv;</button>
+        <span style="border-left: 1px solid var(--border-color); margin: 0 5px; height: 20px;"></span>
+
+        <button onclick="toggleTheme()" title="Invertir colores">Invertir</button>
+        <span style="border-left: 1px solid var(--border-color); margin: 0 5px; height: 20px;"></span>
+        
+        <button onclick="saveLocal()">Bajar .TXT</button>
+        <button id="btn-drive-action" class="highlight" onclick="handleDriveAction()">Conectar Drive</button>
+        <button onclick="document.getElementById('drive-config').showModal()">⚙️</button>
+    </div>
+
+    <!-- Regla decorativa superior -->
+    <div id="ruler"></div>
+
+    <div id="editor-container">
+        <div id="editor" contenteditable="true" spellcheck="false">
+[NUEVO DOCUMENTO]
+
+OLIVIA asiente sin decir nada. JOSÉ MARÍA espera que le diga
+algo, pero al ver que OLIVIA sigue callada, vuelve a mirar la
+térmica, un poco frustrado.
+
+                JOSÉ MARÍA (CONT'D)
+            (más hacia sus adentros)
+            No me vayas a contar demasiado,
+            eh...
+
+Escribe tu propio texto a partir de aquí...</div>
+    </div>
+
+    <div id="status-bar">
+        <span id="system-status">NOSTALGIK WRITER V1.0_</span>
+        <span id="message-log"></span>
+    </div>
+
+    <!-- Modal Configuración Drive -->
+    <dialog id="drive-config">
+        <h3>Configuración API Google Drive</h3>
+        <p class="help-text">Para guardar directamente en tu nube, necesitas crear un proyecto gratuito en Google Cloud Console, habilitar la 'Google Drive API' y crear un <b>ID de cliente de OAuth (Aplicación Web)</b>.</p>
+        
+        <label>Client ID de OAuth:</label>
+        <input type="text" id="client-id-input" placeholder="ejemplo: 12345678-abcd.apps.googleusercontent.com">
+        
+        <div style="text-align: right; margin-top: 10px;">
+            <button onclick="document.getElementById('drive-config').close()">Cancelar</button>
+            <button onclick="saveConfig()">Guardar Configuración</button>
+        </div>
+    </dialog>
+
+    <script>
+        // --- UI & EDITOR BASICS ---
+        
+        function logMessage(msg) {
+            const logArea = document.getElementById('message-log');
+            logArea.innerText = `[ ${msg.toUpperCase()} ]`;
+            logArea.style.animation = 'none'; 
+            setTimeout(() => {
+                logArea.innerText = '';
+                logArea.style.animation = 'blink 1s step-end infinite';
+            }, 4000);
+        }
+
+        function toggleTheme() {
+            document.body.classList.toggle('light-mode');
+            logMessage('TEMA INVERTIDO');
+        }
+
+        function formatText(command) {
+            document.execCommand(command, false, null);
+            document.getElementById('editor').focus();
+        }
+
+        function alignText(command) {
+            document.execCommand(command, false, null);
+            document.getElementById('editor').focus();
+        }
+
+        // Tabulador invisible y estándar
+        document.getElementById('editor').addEventListener('keydown', function(e) {
+            if (e.key === 'Tab') {
+                e.preventDefault();
+                document.execCommand('insertText', false, '\t');
+            }
+        });
+
+        // Generar la regla superior (Ruler)
+        function generateRuler() {
+            let ruler = "";
+            for(let i=1; i<=80; i++) {
+                if (i % 10 === 0) ruler += (i/10);
+                else if (i % 5 === 0) ruler += "+";
+                else ruler += ".";
+            }
+            document.getElementById('ruler').innerText = ruler;
+        }
+
+        function saveLocal() {
+            const textContent = document.getElementById('editor').innerText; 
+            const blob = new Blob([textContent], { type: 'text/plain;charset=utf-8' });
+            const a = document.createElement('a');
+            a.href = URL.createObjectURL(blob);
+            a.download = (documentTitle || 'nostalgik_doc') + '.txt';
+            a.click();
+            URL.revokeObjectURL(a.href);
+            logMessage('Archivo local descargado');
+        }
+
+        // --- GOOGLE DRIVE INTEGRATION ---
+
+        let tokenClient;
+        let accessToken = null;
+        let currentDriveFileId = null; // Para control de versiones (actualizar en vez de crear)
+        let documentTitle = "Guion_Sin_Titulo";
+
+        // Cargar configuración guardada
+        window.onload = () => {
+            generateRuler();
+            const savedClientId = localStorage.getItem('gdrive_client_id');
+            if(savedClientId) document.getElementById('client-id-input').value = savedClientId;
+            
+            // Autoguardado local como respaldo
+            const savedData = localStorage.getItem('nostalgik_save');
+            if (savedData) document.getElementById('editor').innerHTML = savedData;
+            
+            document.getElementById('editor').focus();
+            initGoogleAPI();
+        }
+
+        // Respaldo continuo en local
+        document.getElementById('editor').addEventListener('input', () => {
+            localStorage.setItem('nostalgik_save', document.getElementById('editor').innerHTML);
+        });
+
+        function saveConfig() {
+            const clientId = document.getElementById('client-id-input').value.trim();
+            localStorage.setItem('gdrive_client_id', clientId);
+            
+            // Limpiar claves antiguas si existieran
+            localStorage.removeItem('gdrive_api_key'); 
+            
+            document.getElementById('drive-config').close();
+            initGoogleAPI();
+            logMessage('Credenciales guardadas');
+        }
+
+        function initGoogleAPI() {
+            const clientId = localStorage.getItem('gdrive_client_id');
+            if (!clientId) return; // Esperar a que el usuario lo configure
+
+            // Inicializar el cliente de token de Google
+            if (window.google && google.accounts) {
+                tokenClient = google.accounts.oauth2.initTokenClient({
+                    client_id: clientId,
+                    scope: 'https://www.googleapis.com/auth/drive.file',
+                    callback: (tokenResponse) => {
+                        if (tokenResponse && tokenResponse.access_token) {
+                            accessToken = tokenResponse.access_token;
+                            document.getElementById('btn-drive-action').innerText = "Guardar en Drive";
+                            logMessage('Conectado a Drive');
+                            // Si se conectó porque intentó guardar, proceder a guardar
+                            saveToDrive();
+                        }
+                    },
+                });
+            }
+        }
+
+        function handleDriveAction() {
+            const clientId = localStorage.getItem('gdrive_client_id');
+            if (!clientId) {
+                document.getElementById('drive-config').showModal();
+                logMessage('Falta configuración');
+                return;
+            }
+
+            if (!accessToken) {
+                // Solicitar inicio de sesión y permisos
+                tokenClient.requestAccessToken();
+            } else {
+                // Ya autenticado, proceder a guardar
+                saveToDrive();
+            }
+        }
+
+        async function saveToDrive() {
+            if (!accessToken) return;
+
+            // Si es un documento nuevo en Drive, preguntar el título
+            if (!currentDriveFileId) {
+                let userTitle = prompt("Introduce el título del documento para Drive:", documentTitle);
+                if (userTitle === null) return; // Canceló
+                documentTitle = userTitle;
+            }
+
+            logMessage('Guardando...');
+            const textContent = document.getElementById('editor').innerText;
+            
+            // Construir metadatos y cuerpo para la API de Drive
+            const metadata = {
+                name: `${documentTitle}.txt`,
+                mimeType: 'text/plain'
+            };
+
+            const form = new FormData();
+            form.append('metadata', new Blob([JSON.stringify(metadata)], { type: 'application/json' }));
+            form.append('file', new Blob([textContent], { type: 'text/plain' }));
+
+            try {
+                let url = 'https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart';
+                let method = 'POST';
+
+                // Si ya existe un ID, hacemos un PATCH para actualizarlo (Crear una nueva versión)
+                if (currentDriveFileId) {
+                    url = `https://www.googleapis.com/upload/drive/v3/files/${currentDriveFileId}?uploadType=multipart`;
+                    method = 'PATCH';
+                }
+
+                const response = await fetch(url, {
+                    method: method,
+                    headers: {
+                        'Authorization': 'Bearer ' + accessToken
+                    },
+                    body: form
+                });
+
+                const data = await response.json();
+                
+                if (data.id) {
+                    currentDriveFileId = data.id; // Guardamos el ID para futuras versiones
+                    logMessage(`Guardado v${Date.now().toString().slice(-4)}`);
+                } else {
+                    logMessage('Error al guardar');
+                    console.error("Drive Error:", data);
+                }
+            } catch (error) {
+                logMessage('Error de red');
+                console.error(error);
+            }
+        }
+
+    </script>
+</body>
+</html>
